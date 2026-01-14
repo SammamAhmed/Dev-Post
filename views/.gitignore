@@ -1,5 +1,0 @@
-.env
-node_modules/
-devpost.db
-devpost.db-shm
-devpost.db-wal
