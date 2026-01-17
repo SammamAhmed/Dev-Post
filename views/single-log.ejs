@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <%- include('includes/head') %>
+  <body>
+    <%- include('includes/header') %>
+
+    <main>
+      <h1><%= log.title %></h1>
+
+      <div class="log-thread">
+        <div class="log-entry" style="margin-bottom: 15px">
+          <div style="display: inline-block; width: 100%">
+            <strong style="font-size: 1.1em"><%= log.username %>:</strong> "<%=
+            log.body %>"
+            <span style="font-size: 0.85em; color: #666"
+              >Logged on <%= new Date(log.createdDate).getMonth() + 1 %>/<%= new
+              Date(log.createdDate).getDate() %>/<%= new
+              Date(log.createdDate).getFullYear() %>, <%= new
+              Date(log.createdDate).getHours() %>:<%= new
+              Date(log.createdDate).getMinutes().toString().padStart(2, '0')
+              %></span
+            ><% if (isAuthor) { %> |
+            <a href="/edit-log/<%= log.id %>" style="font-size: 0.9em">edit</a>
+            |
+            <a
+              href="#"
+              onclick="if(confirm('Deleting this log will delete all sublogs related to it. Are you sure?')) document.getElementById('delete-log-form').submit(); return false;"
+              style="font-size: 0.9em"
+              >delete</a
+            ><% } %>
+          </div>
+        </div>
+
+        <% if (sublogs && sublogs.length > 0) { %> <% sublogs.forEach(sublog =>
+        { %>
+        <div class="log-entry sublog" style="margin-bottom: 15px">
+          <div style="display: inline-block; width: 100%">
+            <strong style="font-size: 1.1em"><%= sublog.username %>:</strong>
+            "<%= sublog.body %>"
+            <span style="font-size: 0.85em; color: #666"
+              >Logged on <%= new Date(sublog.createdDate).getMonth() + 1 %>/<%=
+              new Date(sublog.createdDate).getDate() %>/<%= new
+              Date(sublog.createdDate).getFullYear() %>, <%= new
+              Date(sublog.createdDate).getHours() %>:<%= new
+              Date(sublog.createdDate).getMinutes().toString().padStart(2, '0')
+              %></span
+            ><% if (user && sublog.authorid === user.userid) { %> |
+            <a href="/edit-sublog/<%= sublog.id %>" style="font-size: 0.9em"
+              >edit</a
+            >
+            |
+            <a
+              href="#"
+              onclick="if(confirm('Delete this sublog?')) { const form = document.createElement('form'); form.method = 'POST'; form.action = '/delete-sublog/<%= sublog.id %>'; document.body.appendChild(form); form.submit(); } return false;"
+              style="font-size: 0.9em"
+              >delete</a
+            ><% } %>
+          </div>
+        </div>
+        <% }) %> <% } %>
+      </div>
+
+      <button onclick="window.location.href='/'">Go Back</button>
+      <% if (user) { %>
+      <button
+        onclick="const form = document.getElementById('sublog-form'); form.style.display = form.style.display === 'none' ? 'block' : 'none';"
+      >
+        Add Sublog
+      </button>
+      <div id="sublog-form" style="display: none; margin-top: 10px">
+        <form action="/create-sublog/<%= log.id %>" method="POST">
+          <label for="body">Sublog Content</label>
+          <textarea name="body" id="body" required></textarea>
+          <br />
+          <button type="submit">Submit Sublog</button>
+        </form>
+      </div>
+      <% } %> <% if (isAuthor) { %>
+      <form
+        id="delete-log-form"
+        style="display: none"
+        action="/delete-log/<%= log.id %>"
+        method="POST"
+      ></form>
+      <% } %>
+    </main>
+
+    <%- include('includes/footer') %>
+  </body>
+</html>

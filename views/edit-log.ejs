@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <%- include('includes/head') %>
+  <body>
+    <%- include('includes/header') %>
+
+    <main>
+      <form action="/edit-log/<%= log.id %>" method="POST">
+        <% errors.forEach(error => { %>
+        <p class="notice"><%= error %></p>
+        <% }) %>
+
+        <fieldset>
+          <legend>Edit Existing Log</legend>
+          <label for="title"><small>Title</small></label>
+          <input
+            type="text"
+            value="<%= log.title %>"
+            id="title"
+            name="title"
+            autocomplete="off"
+          />
+
+          <label for="body"><small>Content</small></label>
+          <textarea name="body" id="body"><%= log.body %></textarea>
+
+          <br />
+          <button>Save Changes</button>
+        </fieldset>
+      </form>
+    </main>
+
+    <%- include('includes/footer') %>
+  </body>
+</html>

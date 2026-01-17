@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <%- include('includes/head') %>
+  <body>
+    <%- include('includes/header') %>
+
+    <main>
+      <form action="/edit-sublog/<%= sublog.id %>" method="POST">
+        <% errors.forEach(error => { %>
+        <p class="notice"><%= error %></p>
+        <% }) %>
+
+        <fieldset>
+          <legend>Edit Sublog</legend>
+          <label for="body"><small>Content</small></label>
+          <textarea name="body" id="body" required><%= sublog.body %></textarea>
+
+          <br />
+          <button>Save Changes</button>
+        </fieldset>
+      </form>
+    </main>
+
+    <%- include('includes/footer') %>
+  </body>
+</html>
