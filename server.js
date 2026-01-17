@@ -5,7 +5,7 @@ const sanitizeHTML = require("sanitize-html");
 const bcrypt = require("bcrypt");
 const cookieParser = require("cookie-parser");
 const express = require("express");
-const db = require("better-sqlite3")("devpost.db");
+const db = require("better-sqlite3")("devlog.db");
 db.pragma("journal_mode = WAL");
 
 // database setup here
@@ -22,13 +22,27 @@ const createTables = db.transaction(() => {
 
   db.prepare(
     `
-    CREATE TABLE IF NOT EXISTS posts (
+    CREATE TABLE IF NOT EXISTS logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     createdDate TEXT,
     title STRING NOT NULL,
     body TEXT NOT NULL,
     authorid INTEGER,
     FOREIGN KEY (authorid) REFERENCES users (id)
+    )
+  `
+  ).run();
+
+  db.prepare(
+    `
+    CREATE TABLE IF NOT EXISTS sublogs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    createdDate TEXT,
+    body TEXT NOT NULL,
+    authorid INTEGER,
+    logid INTEGER,
+    FOREIGN KEY (authorid) REFERENCES users (id),
+    FOREIGN KEY (logid) REFERENCES logs (id)
     )
   `
   ).run();
@@ -75,7 +89,7 @@ app.use(function (req, res, next) {
   // try to decode incoming cookie
   try {
     const decoded = jwt.verify(
-      req.cookies.devpostAuthToken,
+      req.cookies.devlogAuthToken,
       process.env.JWTSECRET
     );
     req.user = decoded;
@@ -91,11 +105,11 @@ app.use(function (req, res, next) {
 
 app.get("/", (req, res) => {
   if (req.user) {
-    const postsStatement = db.prepare(
-      "SELECT posts.*, users.username FROM posts INNER JOIN users ON posts.authorid = users.id ORDER BY posts.createdDate DESC"
+    const logsStatement = db.prepare(
+      "SELECT logs.*, users.username FROM logs INNER JOIN users ON logs.authorid = users.id ORDER BY logs.createdDate DESC"
     );
-    const posts = postsStatement.all();
-    return res.render("dashboard", { posts });
+    const logs = logsStatement.all();
+    return res.render("dashboard", { logs });
   }
 
   res.render("homepage");
@@ -106,7 +120,7 @@ app.get("/login", (req, res) => {
 });
 
 app.get("/logout", (req, res) => {
-  res.clearCookie("devpostAuthToken");
+  res.clearCookie("devlogAuthToken");
   res.redirect("/");
 });
 
@@ -152,7 +166,7 @@ app.post("/login", (req, res) => {
     process.env.JWTSECRET
   );
 
-  res.cookie("devpostAuthToken", authToken, {
+  res.cookie("devlogAuthToken", authToken, {
     httpOnly: true,
     secure: true,
     sameSite: "strict",
@@ -169,11 +183,11 @@ function mustBeLoggedIn(req, res, next) {
   return res.redirect("/");
 }
 
-app.get("/create-post", mustBeLoggedIn, (req, res) => {
-  res.render("create-post");
+app.get("/create-log", mustBeLoggedIn, (req, res) => {
+  res.render("create-log");
 });
 
-function sharedPostValidation(req) {
+function sharedLogValidation(req) {
   const errors = [];
 
   if (typeof req.body.title !== "string") req.body.title = "";
@@ -195,97 +209,187 @@ function sharedPostValidation(req) {
   return errors;
 }
 
-app.get("/edit-post/:id", mustBeLoggedIn, (req, res) => {
-  // try to look up the post in question
-  const statement = db.prepare("SELECT * FROM posts WHERE id = ?");
-  const post = statement.get(req.params.id);
+app.get("/edit-log/:id", mustBeLoggedIn, (req, res) => {
+  // try to look up the log in question
+  const statement = db.prepare("SELECT * FROM logs WHERE id = ?");
+  const log = statement.get(req.params.id);
 
-  if (!post) {
+  if (!log) {
     return res.redirect("/");
   }
 
   // if you're not the author, redirect to homepage
-  if (post.authorid !== req.user.userid) {
+  if (log.authorid !== req.user.userid) {
     return res.redirect("/");
   }
 
-  // otherwise, render the edit post template
-  res.render("edit-post", { post });
+  // otherwise, render the edit log template
+  res.render("edit-log", { log });
 });
 
-app.post("/edit-post/:id", mustBeLoggedIn, (req, res) => {
-  // try to look up the post in question
-  const statement = db.prepare("SELECT * FROM posts WHERE id = ?");
-  const post = statement.get(req.params.id);
+app.post("/edit-log/:id", mustBeLoggedIn, (req, res) => {
+  // try to look up the log in question
+  const statement = db.prepare("SELECT * FROM logs WHERE id = ?");
+  const log = statement.get(req.params.id);
 
-  if (!post) {
+  if (!log) {
     return res.redirect("/");
   }
 
   // if you're not the author, redirect to homepage
-  if (post.authorid !== req.user.userid) {
+  if (log.authorid !== req.user.userid) {
     return res.redirect("/");
   }
 
-  const errors = sharedPostValidation(req);
+  const errors = sharedLogValidation(req);
 
   if (errors.length) {
-    return res.render("edit-post", { errors });
+    return res.render("edit-log", { errors });
   }
 
   const updateStatement = db.prepare(
-    "UPDATE posts SET title = ?, body = ? WHERE id = ?"
+    "UPDATE logs SET title = ?, body = ? WHERE id = ?"
   );
   updateStatement.run(req.body.title, req.body.body, req.params.id);
 
-  res.redirect(`/post/${req.params.id}`);
+  res.redirect(`/log/${req.params.id}`);
 });
 
-app.post("/delete-post/:id", mustBeLoggedIn, (req, res) => {
-  // try to look up the post in question
-  const statement = db.prepare("SELECT * FROM posts WHERE id = ?");
-  const post = statement.get(req.params.id);
+app.get("/edit-sublog/:id", mustBeLoggedIn, (req, res) => {
+  // try to look up the sublog in question
+  const statement = db.prepare("SELECT * FROM sublogs WHERE id = ?");
+  const sublog = statement.get(req.params.id);
 
-  if (!post) {
+  if (!sublog) {
     return res.redirect("/");
   }
 
   // if you're not the author, redirect to homepage
-  if (post.authorid !== req.user.userid) {
+  if (sublog.authorid !== req.user.userid) {
     return res.redirect("/");
   }
 
-  const deleteStatement = db.prepare("DELETE FROM posts WHERE id = ?");
+  // otherwise, render the edit sublog template
+  res.render("edit-sublog", { sublog });
+});
+
+app.post("/edit-sublog/:id", mustBeLoggedIn, (req, res) => {
+  // try to look up the sublog in question
+  const statement = db.prepare("SELECT * FROM sublogs WHERE id = ?");
+  const sublog = statement.get(req.params.id);
+
+  if (!sublog) {
+    return res.redirect("/");
+  }
+
+  // if you're not the author, redirect to homepage
+  if (sublog.authorid !== req.user.userid) {
+    return res.redirect("/");
+  }
+
+  const errors = [];
+
+  if (typeof req.body.body !== "string") req.body.body = "";
+
+  req.body.body = sanitizeHTML(req.body.body.trim(), {
+    allowedTags: [],
+    allowedAttributes: {},
+  });
+
+  if (!req.body.body) errors.push("You must provide content.");
+
+  if (errors.length) {
+    return res.render("edit-sublog", { errors, sublog });
+  }
+
+  const updateStatement = db.prepare(
+    "UPDATE sublogs SET body = ? WHERE id = ?"
+  );
+  updateStatement.run(req.body.body, req.params.id);
+
+  // redirect to the log page
+  const logStatement = db.prepare("SELECT logid FROM sublogs WHERE id = ?");
+  const logId = logStatement.get(req.params.id).logid;
+  res.redirect(`/log/${logId}`);
+});
+
+app.post("/delete-sublog/:id", mustBeLoggedIn, (req, res) => {
+  // try to look up the sublog in question
+  const statement = db.prepare("SELECT * FROM sublogs WHERE id = ?");
+  const sublog = statement.get(req.params.id);
+
+  if (!sublog) {
+    return res.redirect("/");
+  }
+
+  // if you're not the author, redirect to homepage
+  if (sublog.authorid !== req.user.userid) {
+    return res.redirect("/");
+  }
+
+  const deleteStatement = db.prepare("DELETE FROM sublogs WHERE id = ?");
+  deleteStatement.run(req.params.id);
+
+  res.redirect(`/log/${sublog.logid}`);
+});
+
+app.post("/delete-log/:id", mustBeLoggedIn, (req, res) => {
+  // try to look up the log in question
+  const statement = db.prepare("SELECT * FROM logs WHERE id = ?");
+  const log = statement.get(req.params.id);
+
+  if (!log) {
+    return res.redirect("/");
+  }
+
+  // if you're not the author, redirect to homepage
+  if (log.authorid !== req.user.userid) {
+    return res.redirect("/");
+  }
+
+  // Delete all sublogs associated with this log first
+  const deleteSublogsStatement = db.prepare(
+    "DELETE FROM sublogs WHERE logid = ?"
+  );
+  deleteSublogsStatement.run(req.params.id);
+
+  // Then delete the main log
+  const deleteStatement = db.prepare("DELETE FROM logs WHERE id = ?");
   deleteStatement.run(req.params.id);
 
   res.redirect("/");
 });
 
-app.get("/post/:id", (req, res) => {
+app.get("/log/:id", (req, res) => {
   const statement = db.prepare(
-    "SELECT posts.*, users.username FROM posts INNER JOIN users ON posts.authorid = users.id WHERE posts.id = ?"
+    "SELECT logs.*, users.username FROM logs INNER JOIN users ON logs.authorid = users.id WHERE logs.id = ?"
   );
-  const post = statement.get(req.params.id);
+  const log = statement.get(req.params.id);
 
-  if (!post) {
+  if (!log) {
     return res.redirect("/");
   }
 
-  const isAuthor = req.user && post.authorid === req.user.userid;
+  const isAuthor = req.user && log.authorid === req.user.userid;
 
-  res.render("single-post", { post, isAuthor });
+  const sublogsStatement = db.prepare(
+    "SELECT sublogs.*, users.username FROM sublogs INNER JOIN users ON sublogs.authorid = users.id WHERE sublogs.logid = ? ORDER BY sublogs.createdDate ASC"
+  );
+  const sublogs = sublogsStatement.all(req.params.id);
+
+  res.render("single-log", { log, isAuthor, sublogs });
 });
 
-app.post("/create-post", mustBeLoggedIn, (req, res) => {
-  const errors = sharedPostValidation(req);
+app.post("/create-log", mustBeLoggedIn, (req, res) => {
+  const errors = sharedLogValidation(req);
 
   if (errors.length) {
-    return res.render("create-post", { errors });
+    return res.render("create-log", { errors });
   }
 
   // save into database
   const insertStatement = db.prepare(
-    "INSERT INTO posts (title, body, authorid, createdDate) VALUES (?, ?, ?, ?)"
+    "INSERT INTO logs (title, body, authorid, createdDate) VALUES (?, ?, ?, ?)"
   );
   const result = insertStatement.run(
     req.body.title,
@@ -294,10 +398,40 @@ app.post("/create-post", mustBeLoggedIn, (req, res) => {
     new Date().toISOString()
   );
 
-  const getPostStatement = db.prepare("SELECT * FROM posts WHERE ROWID = ?");
-  const realPost = getPostStatement.get(result.lastInsertRowid);
+  const getLogStatement = db.prepare("SELECT * FROM logs WHERE ROWID = ?");
+  const realLog = getLogStatement.get(result.lastInsertRowid);
 
-  res.redirect(`/post/${realPost.id}`);
+  res.redirect(`/log/${realLog.id}`);
+});
+
+app.post("/create-sublog/:logid", mustBeLoggedIn, (req, res) => {
+  const errors = [];
+
+  if (typeof req.body.body !== "string") req.body.body = "";
+
+  req.body.body = sanitizeHTML(req.body.body.trim(), {
+    allowedTags: [],
+    allowedAttributes: {},
+  });
+
+  if (!req.body.body) errors.push("You must provide content for the sublog.");
+
+  if (errors.length) {
+    return res.redirect(`/log/${req.params.logid}`);
+  }
+
+  // save into database
+  const insertStatement = db.prepare(
+    "INSERT INTO sublogs (body, authorid, logid, createdDate) VALUES (?, ?, ?, ?)"
+  );
+  insertStatement.run(
+    req.body.body,
+    req.user.userid,
+    req.params.logid,
+    new Date().toISOString()
+  );
+
+  res.redirect(`/log/${req.params.logid}`);
 });
 
 app.post("/register", (req, res) => {
@@ -357,7 +491,7 @@ app.post("/register", (req, res) => {
     process.env.JWTSECRET
   );
 
-  res.cookie("devpostAuthToken", authToken, {
+  res.cookie("devlogAuthToken", authToken, {
     httpOnly: true,
     secure: true,
     sameSite: "strict",
